@@ -1,38 +1,42 @@
-import { localApi } from "@src/config/api";
+"use server";
 
-class AuthService {
-	async login(params: {
-		email: string;
-		password: string;
-	}): Promise<{
-		accessToken: string;
-		refreshToken: string;
-	}> {
-		const response = await localApi.post("/auth/login", params);
+import { cookies } from "next/headers";
 
-		return response.data;
-	}
+import { publicApi } from "@src/config/api";
+import { ACCESS_TOKEN_NAME, REFRESH_TOKEN_NAME } from "../constants/token-names";
+import { buildCookie } from "../utils/build-cookies";
 
-	async refreshToken(): Promise<{
-		accesstoken: string;
-	}> {
-		const response = await localApi.post("/auth/refresh-token");
+export async function authenticate(params: {
+	email: string;
+	password: string;
+}): Promise<{ accesstoken: string; }> {
+	const response = await publicApi.post<{ accesstoken: string; refreshtoken: string }>("/authenticate", params);
 
-		return response.data;
-	}
-	
-	async logout(): Promise<void> {
-		await localApi.post("/auth/logout");
-	}
+	const accesstoken = response.data.accesstoken;
+	const refreshtoken = response.data.accesstoken;
 
-	
-	async getAccessToken(): Promise<{
-		accesstoken: string;
-	}> {
-		const response = await localApi.get("/auth/get-access-token");
+	cookies().set(buildCookie.accesstoken(accesstoken));
+	cookies().set(buildCookie.refreshToken(refreshtoken));
 
-		return response.data;
-	}
+	return { accesstoken };
 }
 
-export const authService = new AuthService();
+export async function refreshToken(token: string): Promise<{
+	accesstoken: string;
+}> {
+	const response = await publicApi.post<{ accesstoken: string; refreshtoken: string }>("/refresh-token", { token });
+
+	const accesstoken = response.data.accesstoken;
+	const refreshtoken = response.data.refreshtoken;
+
+	cookies().set(buildCookie.accesstoken(accesstoken));
+	cookies().set(buildCookie.refreshToken(refreshtoken));
+
+	return { accesstoken };
+}
+
+export async function logout(): Promise<void> {
+	await publicApi.post("/auth/logout");
+	cookies().delete(ACCESS_TOKEN_NAME);
+	cookies().delete(REFRESH_TOKEN_NAME);
+}

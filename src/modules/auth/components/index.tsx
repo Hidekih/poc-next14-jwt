@@ -1,15 +1,15 @@
 "use client";
 
 import { SubmitHandler, useForm } from "react-hook-form";
-import { authService } from "../services/auth.service";
-import { privateApi } from "@src/config/api";
+import { authenticate } from "../services/auth.service";
+import { getDocuments } from "../services/test.service";
 
 export const LoginForm = () => {
     const { register, handleSubmit } = useForm<{ email: string; password: string; }>();
     
     const onSubmit: SubmitHandler<{ email: string; password: string; }> = async (data) => {
         try {
-            const response = await authService.login(data);
+            const response = await authenticate(data);
             console.log(response);
         } catch (err: any) {
             console.error(err.message)
@@ -17,8 +17,11 @@ export const LoginForm = () => {
     } 
 
     const handleFetchPrivateRoute = async () => {
-        const res = await privateApi.get("/documents");
-        // console.log(res);
+        try {
+            await getDocuments();
+        } catch (err: any) {
+            console.error(err.message)
+        }
     }
 
     return (

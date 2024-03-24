@@ -1,44 +1,37 @@
 import axios, { AxiosInstance } from "axios";
+import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 
 import { env } from "./env";
-import { authService } from "@src/modules/auth/services/auth.service";
-import { getAccessTokenOnServer } from "./get-access-token-on-server";
-import { getAccessTokenFromClient } from "./get-access-token-from-client";
+import { ACCESS_TOKEN_NAME, REFRESH_TOKEN_NAME } from "@src/modules/auth/constants/token-names";
+import { refreshToken } from "@src/modules/auth/services/auth.service";
 
-const setRefreshTokenInterceptor = (axios: AxiosInstance) => {
+const setInterceptor = (axios: AxiosInstance) => {
 	axios.interceptors.request.use(async (config) => {
-		const isServerSide = typeof window === "undefined";
-		
-		if (isServerSide) {
-			const accesstoken = await getAccessTokenOnServer();
-			if (!accesstoken) return config;
-			config.headers["Authorization"] = `Bearer ${accesstoken}`;
-		};
-		
-		if (!isServerSide) {
-			const accesstoken = getAccessTokenFromClient();
-			if (!accesstoken) return config;
-			config.headers["Authorization"] = `Bearer ${accesstoken}`;
-		}
+		const accesstoken = cookies().get(ACCESS_TOKEN_NAME)?.value;
+		if (accesstoken) config.headers["Authorization"] = `Bearer ${accesstoken}`;
 
 		return config;
 	});
 
 	axios.interceptors.response.use(
 		(response) => response,
-		async (error) => {	
+		async (error) => {
 			const previousRequest = error.config;
+			const isError401 = error.response?.status === 401;
 
-			const isError401 = error?.message?.includes("401") || error.response?.status === 401;
+			if (isError401) {
+				try {
+					const refreshtoken = cookies().get(REFRESH_TOKEN_NAME)?.value;
+					const { accesstoken: newAccesstoken } = await refreshToken(refreshtoken!);
+					previousRequest.headers["Authorization"] = `Bearer ${newAccesstoken}`;
 
-			if (isError401 && !previousRequest.sent) {
-				previousRequest.sent = true;
-
-				const { accesstoken: newAccesstoken } = await authService.refreshToken();
-
-				previousRequest.headers["Authorization"] = `Bearer ${newAccesstoken}`;
-
-				return axios(previousRequest);
+					return axios(previousRequest);
+				} catch (err: any) {
+					cookies().delete(ACCESS_TOKEN_NAME);
+					cookies().delete(REFRESH_TOKEN_NAME);
+					redirect("/");
+				}
 			}
 
 			return error;
@@ -50,8 +43,5 @@ const setRefreshTokenInterceptor = (axios: AxiosInstance) => {
 
 const axiosInstance = axios.create({ baseURL: env.api.base_url });
 
-const publicApi = axios.create({ baseURL: env.api.base_url });
-const localApi = axios.create({ baseURL: "/api" });
-const privateApi = setRefreshTokenInterceptor(axiosInstance);
-
-export { publicApi, localApi, privateApi };
+export const publicApi = axios.create({ baseURL: env.api.base_url });
+export const privateApi = setInterceptor(axiosInstance);

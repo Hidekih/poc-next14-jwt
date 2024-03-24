@@ -1,11 +1,10 @@
 "use client";
 
-import { privateApi } from "@src/config/api";
+import { getDocuments } from "@src/modules/auth/services/test.service";
 
 export const Buttao = () => {
     const clients = async () => {
-        const response = await privateApi.get("/acceptanceTerm");
-        console.log(response)
+        const response = await getDocuments();
     }
     
     return (
